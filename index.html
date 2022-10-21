@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Solarity Summer Camp</title>
+    <meta name="description" content="Basic example for website-display component.">
+    
+    </meta>
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://supereggbert.github.io/aframe-htmlembed-component/dist/build.js"></script>
+
+    <script
+            src="https://unpkg.com/aframe-environment-component@1.3.1/dist/aframe-environment-component.min.js"></script>
+    <script src="/CSS3DRenderer.js"></script>
+    <link rel="icon" type="image/x-icon" href="/logo.png">
+</head>
+<style>
+    body {
+        transform: translate3d(0, 0, 0);
+    }
+</style>
+
+
+<script>
+    AFRAME.registerComponent('drag-rotate-component', {
+        schema: { speed: { type: "number", default: 1 } },
+        init: function () {
+            console.log("init")
+            var sceneEl = this.el.sceneEl;
+            var canvasEl = sceneEl.canvas;
+
+            // Wait for canvas to load.
+            if (!canvasEl) {
+                sceneEl.addEventListener('render-target-loaded', bind(this.addEventListeners, this));
+                return;
+            }
+
+            this.ifMouseDown = false;
+            this.x_cord = 0;
+            this.y_cord = 0;
+
+            canvasEl.addEventListener('mousedown', this.OnDocumentMouseDown.bind(this));
+            window.addEventListener('mouseup', this.OnDocumentMouseUp.bind(this));
+            window.addEventListener('mousemove', this.OnDocumentMouseMove.bind(this));
+        },
+        OnDocumentMouseDown: function (event) {
+            this.ifMouseDown = true;
+            this.x_cord = event.clientX;
+            this.y_cord = event.clientY;
+        },
+        OnDocumentMouseUp: function () {
+            this.ifMouseDown = false;
+        },
+        OnDocumentMouseMove: function (event) {
+            if (this.ifMouseDown) {
+                var temp_x = event.clientX - this.x_cord;
+                var temp_y = event.clientY - this.y_cord;
+                if (Math.abs(temp_y) < Math.abs(temp_x)) {
+                    this.el.object3D.rotateY(temp_x * this.data.speed / 1000);
+                }
+                else {
+                    this.el.object3D.rotateX(temp_y * this.data.speed / 1000);
+                }
+                this.x_cord = event.clientX;
+                this.y_cord = event.clientY;
+            }
+        }
+    });
+
+    //entity-slider component
+    AFRAME.registerComponent('website-display', {
+        //schema of the component
+        schema: {
+            url: { type: "string", default: "https://www.google.com/webhp?igu=1" },
+            density: { type: "number", default: 1000 }
+
+        },
+        //using events ensures that event handlers properly clean themselves up when the entity or scene is paused, or the component is detached.
+        events: {
+        },
+        //initializes the entity-slider
+        init: function () {
+            this.found = false;
+        },
+        initCSS: function () {
+            this.cssRenderer.setSize(window.innerWidth, window.innerHeight);
+            this.cssRenderer.domElement.style.position = 'absolute';
+            this.cssRenderer.domElement.style.pointerEvents = "none";
+            document.querySelector('a-scene').appendChild(this.cssRenderer.domElement);
+            window.addEventListener('resize', this.onWindowResize.bind(this), false);
+        },
+        loadIframe: function (url) {
+            var gridX = 5;
+            var gridY = 5;
+            var duration = 500;
+            var timeOut = 100;
+            let width = (this.data.density * this.el.object3D.scale.x);
+            let height = (this.data.density * this.el.object3D.scale.y);
+
+            var element = document.createElement('div');
+            element.className = 'element';
+            element.style.width = width.toString() + 'px';
+            element.style.height = height.toString() + 'px';
+            element.style.backgroundColor = 'rgba(0,127,127,' + (Math.random() * 0.5 + 0.25) + ')';
+            var iframe = document.createElement('iframe');
+            iframe.style.backgroundColor = '#ffffff';
+            iframe.style.width = width.toString() + 'px';
+            iframe.style.height = height.toString() + 'px';
+            console.log(width.toString());
+            loadTime = (new Date()).getTime();
+            iframe.src = url;
+            iframe.onload = function (e) {
+                var diff = (new Date()).getTime() - loadTime;
+                if (diff < timeOut) {
+                    iframe.src = "data:text/html;charset=utf-8," + escape('<h1>XSS</h1>');
+                }
+            };
+            element.appendChild(iframe);
+
+            var object = new CSS3DObject(element);
+            var realPosition = new THREE.Vector3();
+            this.el.object3D.getWorldPosition(object.position);
+            this.el.object3D.getWorldQuaternion(object.quaternion);
+            object.scale.set(1000 / this.data.density, 1000 / this.data.density, 1000 / this.data.density)
+            var target = new THREE.Object3D();
+            target.position.x = 0;
+            target.position.y = 0;
+            this.cssScene.add(object);
+        },
+        animate: function () {
+            var requestId = requestAnimationFrame(this.animate.bind(this));
+            this.render();
+        },
+        render: function () {
+            this.cssRenderer.render(this.cssScene, this.camera)
+        },
+        onWindowResize: function () {
+            var positionInfo = this.el.sceneEl.getBoundingClientRect();
+
+            this.camera.aspect = positionInfo.width / positionInfo.height;
+            this.camera.updateProjectionMatrix();
+
+            this.cssRenderer.setSize(positionInfo.width, positionInfo.height);
+
+        },
+        //most of the logic is in the .update() handler so that it can initialize and handle updates all at once without repeating code
+        update: function (oldData) {
+        },
+        //handle component removal
+        remove: function () {
+        },
+        tick: function (time, timeDelta) {
+            if (this.el.sceneEl && this.el.sceneEl.camera && !this.found) {
+                this.cssScene = new THREE.Scene()
+                this.camera = this.el.sceneEl.camera;
+                this.cssRenderer = new CSS3DRenderer();
+                this.el.sceneEl.object3D.scale.set(1000, 1000, 1000);
+
+                this.found = true;
+                this.initCSS();
+                this.loadIframe(this.data.url);
+                this.animate();
+            }
+        }
+    });
+
+</script>
+
+
+<body>
+    <a-scene renderer="antialias: true;
+    colorManagement: true;
+    sortObjects: true;
+    physicallyCorrectLights: true;
+    maxCanvasWidth: 1920;
+    maxCanvasHeight: 1920;" 
+    cursor="rayOrigin: mouse" raycaster="objects:.clickable; interval:100;"
+    vr-mode-ui="enabled: false">
+
+        <a-entity 
+        renderer="antialias: true;
+        colorManagement: true;
+        sortObjects: true;
+        physicallyCorrectLights: true;
+        maxCanvasWidth: 1920;
+        maxCanvasHeight: 1920;"
+        environment="preset: starry"></a-entity>
+
+        <a-entity light="type: ambient; intensity: 4; color:  #FFFFFF; shadowCameraVisible: false;"></a-entity>
+
+
+        <a-entity simple-navmesh-constraint="navmesh:#navmesh;fall:0.5;height:1.65;" id="head"
+                      camera="fov: 80; active: true" position="0 1.65 0" wasd-controls="acceleration: 20;"
+                      look-controls="pointerLockEnabled: true; reverseMouseDrag: false">
+                <a-entity id="cursor" cursor raycaster="far: 10; objects: .clickable"
+                          material="color: white; shader: flat" position="0 0 -0.3"
+                          geometry="primitive: sphere; radius: 0.001">
+                </a-entity>
+            </a-entity>
+
+
+        <a-assets timeout="100000">
+            <a-asset-item id="room" src="Asset/room.glb"></a-asset-item>
+        </a-assets>
+
+        <a-gltf-model id="room" shadow="cast: true; receive: true" class="model" src="#room" position="0 0 0"
+        scale="1 1 1"></a-gltf-model>
+
+
+        <a-entity rotation="20 90 0" scale="0.6 0.5 1" website-display="url: https://miniroyale.io/" 
+        position="2.4 1.5 1.07">
+            <a-entity id=""
+                      text="color: green; align: center; value: Video; width: 1.2">
+            </a-entity>
+        </a-entity>
+
+        <a-entity rotation="-35 270 0" scale="0.5 0.3 0.5" website-display="url: https://uniswap.io/" 
+        position="2.7 1.55 2.205">
+            <a-entity id=""
+                      text="color: green; align: center; value: Video; width: 1.2">
+            </a-entity>
+        </a-entity>
+
+
+        <a-sky src="bg.jpg" rotation="0 0 0" opacity="0.8"></a-sky>
+        <a-entity id="lowbar" position="-0.7 0 2">
+            <a-entity id="kazetachinuButton" position="0 -2.5 -2.2" rotation="-20 0 0" mixin="frame" >
+              <a-link href="mint/index.html" scale="0.6 0.6 0.6" title="Mint Now" image="mint"></a-link>
+            </a-entity>
+
+            <a-entity id="ponyoButton" position="2.8 -2.5 -2" rotation="-20 -40 0" mixin="frame" >
+              
+              <a-link href="../link-traversal/index.html" image="#explore" scale="0.6 0.6 0.6" title="Explore"></a-link>
+            </a-entity>
+
+            <a-entity id="ponyoButton" position="1.4 -2.5 -2.2" rotation="-20 0 0" mixin="frame" >
+              
+              <a-link href="../link-traversal/index.html" image="#explore" scale="0.6 0.6 0.6" title="Explore"></a-link>
+            </a-entity>
+            
+            <a-entity id="karigurashiButton" position="-1.4 -2.5 -2" rotation="-20 40 0" mixin="frame" >
+              
+              <a-link href="https://provanft.vercel.app/" image="#thumbJapan" scale="0.6 0.6 0.6" title="NFT Gallery"></a-link>
+            </a-entity>
+          
+          </a-entity>
+    </a-scene>
+    <div style="padding: 15px; opacity: 0.4; position: fixed; bottom: 20px; left: 50%; transform: translate(-50%, 0)">
+        <div id="left"
+             style="background-color: red; opacity: 1; display: inline-block; width: 80px; height: 60px; margin: 15px">
+        <p style="color: white; text-align: center;">Pitch</p>
+        </div>
+        <div id="center"
+             style="background-color: green; opacity: 1;display: inline-block; width: 80px; height: 60px; margin: 15px">
+             <p style="color: white; text-align: center;">Video</p>
+        </div>
+        <div id="right"
+             style="background-color: blue; opacity: 1;display: inline-block; width: 80px; height: 60px; margin: 15px">
+             <p style="color: white; text-align: center;">Test</p>
+        </div>
+    </div>
+    
+</body>
+
+<script>
+
+    var scene = document.querySelector("a-scene");
+    if (scene.hasLoaded) {
+        run();
+    } else {
+        scene.addEventListener('loaded', run);
+    }
+    function rotateRight() {
+        document.getElementById("camera").setAttribute("rotation", "0 -60 0");
+        console.log("rotating")
+    }
+    function rotateCenter() {
+        document.getElementById("camera").setAttribute("rotation", "0 0 0");
+        console.log("rotating")
+    }
+    function rotateLeft() {
+        document.getElementById("camera").setAttribute("rotation", "0 60 0");
+        console.log("rotating")
+    }
+    function run() {
+        var left, center, right;
+
+        left = document.getElementById("left")
+
+        right = document.getElementById("right")
+
+        center = document.getElementById("center")
+
+        left.addEventListener('click', rotateLeft);
+
+        center.addEventListener('click', rotateCenter);
+
+        right.addEventListener('click', rotateRight);
+
+    }
+</script>
+
+</html>
